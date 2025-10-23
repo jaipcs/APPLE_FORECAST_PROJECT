@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 st.set_page_config(page_title="Prophet Forecast App", layout="wide")
-st.title("📊 Prophet Forecast App (Excel-Compatible)")
+st.title(" Prophet Forecast App (Excel-Compatible)")
 
 st.markdown("""
 Upload your Excel file with a **date/time column** and a **numeric target column**.
@@ -33,7 +33,7 @@ def evaluate(y_true, y_pred):
     return mae, rmse
 
 if file:
-    # ✅ Read Excel instead of CSV
+    #  Read Excel instead of CSV
     df = pd.read_excel(file)
 
     # Try to detect date and numeric columns
@@ -99,7 +99,7 @@ if file:
     excel_file = "forecast_results.xlsx"
     out.to_excel(excel_file, index=False)
     with open(excel_file, "rb") as f:
-        st.download_button("📥 Download Forecast Excel", f, file_name="forecast_results.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button(" Download Forecast Excel", f, file_name="forecast_results.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 else:
     st.info("Please upload your Excel file to begin.")
