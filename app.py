@@ -7,7 +7,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 import matplotlib.pyplot as plt
 import io
 from prophet.diagnostics import performance_metrics
-
+from prophet.models import StanBackendEnum
 
 # -----------------------------------
 # STREAMLIT APP CONFIG
@@ -58,8 +58,12 @@ if uploaded_file:
         split_idx = int(len(df) * (1 - test_size / 100))
         train_df, test_df = df.iloc[:split_idx], df.iloc[split_idx:]
 
-        model = Prophet(yearly_seasonality=yearly,weekly_seasonality=weekly,daily_seasonality=daily)
-        model.fit(train_df, backend="cmdstanpy")
+        # Force Prophet to use cmdstanpy backend globally
+        model = Prophet(yearly_seasonality=yearly, weekly_seasonality=weekly, daily_seasonality=daily)
+        model.stan_backend = StanBackendEnum.CMDSTANPY
+
+        # Fit model (no backend argument here!)
+        model.fit(train_df)
 
         # Predict on test data
         future = model.make_future_dataframe(periods=len(test_df), freq=forecast_freq)
@@ -149,4 +153,3 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"❌ Error: {e}")
-
