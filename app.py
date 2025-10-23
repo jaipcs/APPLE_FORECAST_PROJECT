@@ -230,35 +230,67 @@ with tab5:
 # ============================================================
 with tab6:
     st.subheader("🤖 Prophet Model & Metrics")
+
+    # ---------------- Validate data ----------------
     data = ss.df_final
     if data is None and ss.df_clean is not None:
         tmp = ss.df_clean[[ss.date_col, ss.target_col]].dropna()
-        data = tmp.rename(columns={ss.date_col:"ds", ss.target_col:"y"})
+        data = tmp.rename(columns={ss.date_col: "ds", ss.target_col: "y"})
         data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
         data = data.dropna(subset=["ds"]).sort_values("ds").reset_index(drop=True)
 
-    if data is not None and {"ds","y"}.issubset(data.columns):
-        split = int(len(data)*(1 - test_pct/100))
-        train, test = data.iloc[:split], data.iloc[split:]
-        with st.spinner("Training Prophet..."):
-            model = Prophet(yearly_seasonality=yearly,
-                            weekly_seasonality=weekly,
-                            daily_seasonality=daily)
-            model.fit(train)
-        future = model.make_future_dataframe(periods=len(test), freq=freq)
-        fcst = model.predict(future)
-        y_true, y_pred = test["y"].values, fcst["yhat"].iloc[-len(test):].values
-        mae, rmse, mape = metrics(y_true, y_pred)
-        st.success(f"MAE {mae:.4f} | RMSE {rmse:.4f} | MAPE {mape:.2f}%")
-        fig = go.Figure([
-            go.Scatter(x=test["ds"], y=y_true, name="Actual"),
-            go.Scatter(x=test["ds"], y=y_pred, name="Predicted")
-        ])
-        fig.update_layout(title="Actual vs Predicted", xaxis_title="Date", yaxis_title="Price")
-        st.plotly_chart(fig, width='stretch')
-        ss._model_trained, ss._last_data = model, data
+    # ---------------- Check data validity ----------------
+    if data is not None and {"ds", "y"}.issubset(data.columns):
+        data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
+        data = data.dropna(subset=["ds"]).reset_index(drop=True)
+
+        if len(data) < 20:
+            st.error("❌ Not enough rows for training. Need ≥ 20 valid records.")
+        else:
+            try:
+                split = int(len(data) * (1 - test_pct / 100))
+                train, test = data.iloc[:split], data.iloc[split:]
+
+                with st.spinner("Training Prophet model..."):
+                    model = Prophet(
+                        yearly_seasonality=yearly,
+                        weekly_seasonality=weekly,
+                        daily_seasonality=daily
+                    )
+                    model.fit(train)
+
+                # ---------------- Forecasting ----------------
+                freq_use = freq.strip().upper() if freq.strip() else "D"
+                future = model.make_future_dataframe(periods=len(test), freq=freq_use)
+                fcst = model.predict(future)
+
+                # ---------------- Metrics ----------------
+                y_true = test["y"].values
+                y_pred = fcst["yhat"].iloc[-len(test):].values
+                mae, rmse, mape = metrics(y_true, y_pred)
+                st.success(f"✅ MAE: {mae:.4f} | RMSE: {rmse:.4f} | MAPE: {mape:.2f}%")
+
+                # ---------------- Plot ----------------
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=test["ds"], y=y_true, name="Actual", mode="lines"))
+                fig.add_trace(go.Scatter(x=test["ds"], y=y_pred, name="Predicted", mode="lines"))
+                fig.update_layout(
+                    title="Actual vs Predicted (Test Period)",
+                    xaxis_title="Date",
+                    yaxis_title="Price"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+                # ---------------- Save model ----------------
+                ss._model_trained = model
+                ss._last_data = data
+
+            except Exception as e:
+                st.error(f"❌ Prophet training failed: {e}")
+
     else:
-        st.info("Prepare dataset in Tab 3 or Tab 1.")
+        st.info("Prepare dataset in Tab 3 or Tab 1 first.")
+
 
 # ============================================================
 # TAB 7 — 5-Year Forecast
