@@ -17,9 +17,16 @@ st.caption("Upload an Excel file, clean & explore the data, engineer lag feature
 # ------------------------------
 # Helpers
 # ------------------------------
+
 @st.cache_data(show_spinner=False)
 def load_excel(file, sheet_name=None):
-    return pd.read_excel(file, sheet_name=sheet_name)
+    data = pd.read_excel(file, sheet_name=sheet_name if sheet_name else 0)
+    # if user forgot to specify sheet_name and there are multiple sheets
+    if isinstance(data, dict):
+        first_sheet = list(data.keys())[0]
+        st.warning(f"Multiple sheets detected. Using first sheet: '{first_sheet}'")
+        data = data[first_sheet]
+    return data
 
 def coerce_datetime(df, col):
     ser = pd.to_datetime(df[col], errors="coerce")
