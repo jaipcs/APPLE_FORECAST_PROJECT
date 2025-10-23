@@ -2,104 +2,75 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from prophet import Prophet
-import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+import matplotlib.pyplot as plt
+import io
 
-st.set_page_config(page_title="Prophet Forecast App", layout="wide")
-st.title(" Prophet Forecast App (Excel-Compatible)")
+st.set_page_config(page_title="Prophet Forecast App (Excel-Compatible)", layout="wide")
 
-st.markdown("""
-Upload your Excel file with a **date/time column** and a **numeric target column**.
-The app will automatically train a [Facebook Prophet](https://facebook.github.io/prophet/) model,
-show forecasts, components, and evaluation metrics.
-""")
+st.title("📈 Prophet Forecast App (Excel-Compatible)")
+st.markdown("Upload an Excel file with a date/time column and a numeric target column. "
+            "The app will train a Facebook Prophet model, show forecasts, components, and evaluation metrics.")
 
-# Sidebar configuration
-with st.sidebar:
-    st.header("Model Settings")
-    periods = st.number_input("Forecast periods (steps ahead)", min_value=1, value=30, step=1)
-    freq = st.text_input("Frequency (e.g. D, M, H)", value="D")
-    test_ratio = st.slider("Test size (last % of rows)", 5, 50, 20)
-    yearly = st.checkbox("Include yearly seasonality", value=True)
-    weekly = st.checkbox("Include weekly seasonality", value=True)
-    daily = st.checkbox("Include daily seasonality", value=False)
+uploaded_file = st.file_uploader("Upload your Excel file", type=["xlsx", "xls"])
 
-file = st.file_uploader("Upload your Excel file", type=["xlsx", "xls"])
+if uploaded_file:
+    try:
+        df = pd.read_excel(uploaded_file)
+        st.success(f"✅ Loaded {uploaded_file.name} with {len(df)} rows")
+        st.dataframe(df.head())
 
-def evaluate(y_true, y_pred):
-    y_true, y_pred = np.array(y_true), np.array(y_pred)
-    mae = mean_absolute_error(y_true, y_pred)
-    rmse = mean_squared_error(y_true, y_pred, squared=False)
-    return mae, rmse
+        target_col = st.selectbox("Select target column", [c for c in df.columns if np.issubdtype(df[c].dtype, np.number)])
+        date_col = st.selectbox("Select date/time column", [c for c in df.columns if np.issubdtype(df[c].dtype, np.datetime64) or 'date' in c.lower() or 'time' in c.lower()])
 
-if file:
-    #  Read Excel instead of CSV
-    df = pd.read_excel(file)
+        # Settings
+        st.sidebar.header("Model Settings")
+        forecast_periods = st.sidebar.number_input("Forecast periods (steps ahead)", value=30, step=1)
+        freq = st.sidebar.text_input("Frequency (e.g. D, M, H)", value="D")
+        test_size = st.sidebar.slider("Test size (% of last rows)", min_value=5, max_value=50, value=10)
 
-    # Try to detect date and numeric columns
-    date_col, target_col = None, None
-    for col in df.columns:
-        try:
-            pd.to_datetime(df[col])
-            date_col = col
-            break
-        except Exception:
-            continue
+        run_forecast = st.button("🚀 Run Forecast")
 
-    num_cols = df.select_dtypes(include=[np.number]).columns
-    if not num_cols.empty:
-        target_col = st.selectbox("Select target column", list(num_cols))
-    else:
-        st.error("No numeric columns found for target variable.")
-        st.stop()
+        if run_forecast:
+            df = df[[date_col, target_col]].rename(columns={date_col: "ds", target_col: "y"}).dropna()
+            df["ds"] = pd.to_datetime(df["ds"])
+            df = df.sort_values("ds")
 
-    if date_col is None:
-        st.error("No date/time column detected.")
-        st.stop()
+            if len(df) > 5000:
+                st.warning("Large dataset detected. Sampling 5000 rows for faster training.")
+                df = df.sample(5000).sort_values("ds")
 
-    df[date_col] = pd.to_datetime(df[date_col])
-    df = df.rename(columns={date_col: "ds", target_col: "y"})
-    df = df.sort_values("ds")
+            split_idx = int(len(df) * (1 - test_size / 100))
+            train_df, test_df = df.iloc[:split_idx], df.iloc[split_idx:]
 
-    # Train/test split
-    split_idx = int(len(df) * (1 - test_ratio / 100))
-    train, test = df.iloc[:split_idx], df.iloc[split_idx:]
+            model = Prophet(yearly_seasonality=True, weekly_seasonality=True, daily_seasonality=False)
+            model.fit(train_df)
 
-    # Prophet model
-    model = Prophet(
-        yearly_seasonality=yearly,
-        weekly_seasonality=weekly,
-        daily_seasonality=daily
-    )
-    model.fit(train)
+            future = model.make_future_dataframe(periods=forecast_periods, freq=freq)
+            forecast = model.predict(future)
 
-    # Future dataframe
-    future = model.make_future_dataframe(periods=periods, freq=freq)
-    forecast = model.predict(future)
+            # Plot forecast
+            st.subheader("Forecast Plot")
+            fig1 = model.plot(forecast)
+            st.pyplot(fig1)
 
-    # Plot forecasts
-    st.subheader("Forecast Results")
-    fig1 = model.plot(forecast)
-    st.pyplot(fig1)
+            # Plot components
+            st.subheader("Forecast Components")
+            fig2 = model.plot_components(forecast)
+            st.pyplot(fig2)
 
-    st.subheader("Forecast Components")
-    fig2 = model.plot_components(forecast)
-    st.pyplot(fig2)
+            # Evaluate
+            y_true = test_df["y"].values
+            y_pred = forecast["yhat"].iloc[-len(test_df):].values
+            mae = mean_absolute_error(y_true, y_pred)
+            rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+            st.write(f"**MAE:** {mae:.2f} | **RMSE:** {rmse:.2f}")
 
-    # Evaluation
-    merged = pd.merge(test, forecast[["ds", "yhat"]], on="ds", how="inner")
-    if not merged.empty:
-        mae, rmse = evaluate(merged["y"], merged["yhat"])
-        st.success(f"MAE: {mae:.4f} | RMSE: {rmse:.4f}")
-    else:
-        st.info("Not enough overlapping dates for evaluation.")
+            # Download results
+            out = io.BytesIO()
+            forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].to_excel(out, index=False)
+            st.download_button("📥 Download Forecast Results (Excel)", out.getvalue(), "forecast_results.xlsx")
 
-    # Download Excel
-    out = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]]
-    excel_file = "forecast_results.xlsx"
-    out.to_excel(excel_file, index=False)
-    with open(excel_file, "rb") as f:
-        st.download_button(" Download Forecast Excel", f, file_name="forecast_results.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    except Exception as e:
+        st.error(f"❌ Error: {e}")
 
-else:
-    st.info("Please upload your Excel file to begin.")
