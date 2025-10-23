@@ -59,11 +59,15 @@ if uploaded_file:
         train_df, test_df = df.iloc[:split_idx], df.iloc[split_idx:]
 
         # Force Prophet to use cmdstanpy backend globally
-        model = Prophet(yearly_seasonality=yearly, weekly_seasonality=weekly, daily_seasonality=daily)
-        model.stan_backend = StanBackendEnum.CMDSTANPY
-
-        # Fit model (no backend argument here!)
+        
+        model = Prophet(
+            yearly_seasonality=True,
+            weekly_seasonality=True,
+            daily_seasonality=False
+        )
+        
         model.fit(train_df)
+        
 
         # Predict on test data
         future = model.make_future_dataframe(periods=len(test_df), freq=forecast_freq)
