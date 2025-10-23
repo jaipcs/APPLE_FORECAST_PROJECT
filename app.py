@@ -6,6 +6,8 @@ from prophet.plot import plot_plotly
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import matplotlib.pyplot as plt
 import io
+from prophet.diagnostics import performance_metrics
+
 
 # -----------------------------------
 # STREAMLIT APP CONFIG
@@ -56,12 +58,8 @@ if uploaded_file:
         split_idx = int(len(df) * (1 - test_size / 100))
         train_df, test_df = df.iloc[:split_idx], df.iloc[split_idx:]
 
-        model = Prophet(
-            yearly_seasonality=yearly,
-            weekly_seasonality=weekly,
-            daily_seasonality=daily
-        )
-        model.fit(train_df)
+        model = Prophet(yearly_seasonality=yearly,weekly_seasonality=weekly,daily_seasonality=daily)
+        model.fit(train_df, backend="cmdstanpy")
 
         # Predict on test data
         future = model.make_future_dataframe(periods=len(test_df), freq=forecast_freq)
