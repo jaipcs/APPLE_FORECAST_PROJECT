@@ -195,24 +195,35 @@ with tab4:
         st.info("Build lags in Tab 3.")
 
 # ============================================================
-# TAB 5 — Stock Overview
-# ============================================================
+# ------------------------------
+# Tab 5: Stock Overview
+# ------------------------------
 with tab5:
     st.subheader("📊 Stock Overview")
-    src = ss.df_final or ss.df_clean or ss.df_raw
+
+    src = None
+    if ss.get("df_final") is not None:
+        src = ss.df_final
+    elif ss.get("df_clean") is not None:
+        src = ss.df_clean
+    elif ss.get("df_raw") is not None:
+        src = ss.df_raw
+
     if src is not None:
-        if {"y","ds"}.issubset(src.columns):
-            plot_df = src.rename(columns={"ds":"Date","y":"Price"})
-        elif ss.date_col and ss.target_col and {ss.date_col,ss.target_col}.issubset(src.columns):
-            plot_df = src.rename(columns={ss.date_col:"Date", ss.target_col:"Price"})
+        if {"y", "ds"}.issubset(src.columns):
+            plot_df = src.rename(columns={"ds": "Date", "y": "Price"})
+        elif ss.date_col and ss.target_col and {ss.date_col, ss.target_col}.issubset(src.columns):
+            plot_df = src.rename(columns={ss.date_col: "Date", ss.target_col: "Price"})
         else:
             plot_df = None
+
         if plot_df is not None:
             fig = px.line(plot_df, x="Date", y="Price", title="Historical Stock Price")
             st.plotly_chart(fig, width='stretch')
             st.dataframe(plot_df["Price"].describe().to_frame(), width='stretch')
     else:
         st.info("No data yet.")
+
 
 # ============================================================
 # TAB 6 — Model & Metrics
