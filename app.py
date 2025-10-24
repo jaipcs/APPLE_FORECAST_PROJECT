@@ -261,7 +261,7 @@ with tab5:
 
 
 # ============================================================
-# TAB 6 — Model & Metrics (final stable version)
+# TAB 6 — Model & Metrics (final verified version)
 # ============================================================
 if isinstance(ss.get("df_raw"), dict):
     st.error("❌ Multiple sheets detected. Please clean or select one sheet first.")
@@ -271,7 +271,7 @@ with tab6:
     st.subheader("🤖 Prophet Model & Metrics")
 
     try:
-        # ---------------- Load data ----------------
+        # ---------------- Load and validate data ----------------
         data = ss.get("df_final")
         if data is None and ss.get("df_clean") is not None:
             tmp = ss.df_clean[[ss.date_col, ss.target_col]].dropna()
@@ -283,7 +283,7 @@ with tab6:
             st.info("Prepare dataset in Tab 3 or Tab 1 first.")
             st.stop()
 
-        # ---------------- Clean ----------------
+        # ---------------- Data cleaning ----------------
         data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
         data = data.dropna(subset=["ds"]).reset_index(drop=True)
         if len(data) < 20:
@@ -293,7 +293,7 @@ with tab6:
         # ---------------- Train/Test split ----------------
         split = int(len(data) * (1 - test_pct / 100))
         if split <= 0 or split >= len(data):
-            st.error("❌ Invalid split; check your test size slider.")
+            st.error("❌ Invalid test/train split. Adjust the test size slider.")
             st.stop()
 
         train = data.iloc[:split].copy()
@@ -305,7 +305,7 @@ with tab6:
             model = Prophet(
                 yearly_seasonality=yearly,
                 weekly_seasonality=weekly,
-                daily_seasonality=daily
+                daily_seasonality=daily,
             )
             model.fit(train)
 
@@ -314,16 +314,15 @@ with tab6:
         fcst = model.predict(future)[["ds", "yhat", "yhat_lower", "yhat_upper"]]
 
         # ---------------- Reduce forecast size for stability ----------------
-        fcst = fcst[["ds", "yhat"]]  # only keep necessary columns
+        fcst = fcst[["ds", "yhat"]]
         test_plot = test.copy()
 
-        # Downsample for faster plotting
         if len(test_plot) > 1000:
             step = max(1, len(test_plot) // 1000)
             test_plot = test_plot.iloc[::step]
             st.warning(f"⚡ Downsampled to {len(test_plot)} points for faster plotting.")
 
-        # ---------------- Compute metrics ----------------
+        # ---------------- Metrics ----------------
         y_true = test["y"].to_numpy()
         y_pred = fcst["yhat"].iloc[-len(test):].to_numpy()
         mae, rmse, mape = metrics(y_true, y_pred)
@@ -340,16 +339,16 @@ with tab6:
                           xaxis_title="Date", yaxis_title="Price", height=500)
         st.plotly_chart(fig, use_container_width=True)
 
-        # ---------------- Save model and data for next tabs ----------------
+        # ---------------- Save model ----------------
         ss._model_trained = model
         ss._last_data = data
-
         st.success("✅ Prophet model trained and forecast completed successfully!")
 
-    except Exception as e:
+    except Exception:
         import traceback
         st.error("💥 Prophet crashed — here’s the full traceback:")
         st.code(traceback.format_exc())
+
 
 
 
@@ -384,6 +383,7 @@ with tab7:
         )
     else:
         st.info("Train model first in Tab 6.")
+
 
 
 # ============================================================
