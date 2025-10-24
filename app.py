@@ -211,7 +211,13 @@ with tab5:
         st.stop()
 
     # ✅ Choose the most processed version of data
-    src = ss.get("df_final") or ss.get("df_clean") or ss.get("df_raw")
+    src = None
+    if ss.get("df_final") is not None:
+        src = ss.df_final
+    elif ss.get("df_clean") is not None:
+        src = ss.df_clean
+    elif ss.get("df_raw") is not None:
+        src = ss.df_raw
 
     if src is not None:
         if not isinstance(src, pd.DataFrame):
