@@ -257,81 +257,83 @@ with tab5:
 
 
 # ============================================================
-# TAB 6 — Model & Metrics
+# TAB 6 — Model & Metrics (safe debug version)
 # ============================================================
+if isinstance(ss.get("df_raw"), dict):
+    st.error("❌ Multiple sheets detected. Please clean or select one sheet first.")
+    st.stop()
+
 with tab6:
     st.subheader("🤖 Prophet Model & Metrics")
 
-    # ✅ Guard: prevent multi-sheet dict issue
-    if isinstance(ss.df_raw, dict):
-        st.error("❌ Your uploaded Excel contains multiple sheets. Please clean or select one sheet first.")
-        st.stop()
-
-    # ---------------- Validate data ----------------
-    data = ss.df_final
-    if data is None and ss.df_clean is not None:
-        try:
+    try:
+        data = ss.get("df_final")
+        if data is None and ss.get("df_clean") is not None:
             tmp = ss.df_clean[[ss.date_col, ss.target_col]].dropna()
             data = tmp.rename(columns={ss.date_col: "ds", ss.target_col: "y"})
             data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
             data = data.dropna(subset=["ds"]).sort_values("ds").reset_index(drop=True)
-        except Exception as e:
-            st.error(f"⚠️ Could not prepare data: {e}")
+
+        # ---------------- Validate ----------------
+        if data is None:
+            st.info("Prepare dataset in Tab 3 or Tab 1 first.")
             st.stop()
 
-    # ---------------- Check data validity ----------------
-    if data is not None and isinstance(data, pd.DataFrame) and {"ds", "y"}.issubset(data.columns):
+        if not {"ds", "y"}.issubset(data.columns):
+            st.error("❌ Columns 'ds' and 'y' not found. Please ensure lag features or cleaning were done.")
+            st.stop()
+
         data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
         data = data.dropna(subset=["ds"]).reset_index(drop=True)
-
         if len(data) < 20:
-            st.error("❌ Not enough rows for training. Need ≥ 20 valid records.")
-        else:
-            try:
-                # ---------------- Train/Test Split ----------------
-                split = int(len(data) * (1 - test_pct / 100))
-                train, test = data.iloc[:split], data.iloc[split:]
+            st.error("❌ Not enough valid rows for training (need ≥ 20).")
+            st.stop()
 
-                # ---------------- Train Prophet ----------------
-                with st.spinner("Training Prophet model..."):
-                    model = Prophet(
-                        yearly_seasonality=yearly,
-                        weekly_seasonality=weekly,
-                        daily_seasonality=daily
-                    )
-                    model.fit(train)
+        # ---------------- Train/Test split ----------------
+        split = int(len(data) * (1 - test_pct / 100))
+        train, test = data.iloc[:split], data.iloc[split:]
+        freq_use = (freq or "D").strip().upper()
 
-                # ---------------- Forecast ----------------
-                freq_use = freq.strip().upper() if freq.strip() else "D"
-                future = model.make_future_dataframe(periods=len(test), freq=freq_use)
-                fcst = model.predict(future)
+        # ---------------- Train Prophet ----------------
+        with st.spinner("Training Prophet model..."):
+            model = Prophet(
+                yearly_seasonality=yearly,
+                weekly_seasonality=weekly,
+                daily_seasonality=daily
+            )
+            model.fit(train)
 
-                # ---------------- Metrics ----------------
-                y_true = test["y"].values
-                y_pred = fcst["yhat"].iloc[-len(test):].values
-                mae, rmse, mape = metrics(y_true, y_pred)
-                st.success(f"✅ MAE: {mae:.4f} | RMSE: {rmse:.4f} | MAPE: {mape:.2f}%")
+        # ---------------- Forecast ----------------
+        future = model.make_future_dataframe(periods=len(test), freq=freq_use)
+        fcst = model.predict(future)
 
-                # ---------------- Plot ----------------
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=test["ds"], y=y_true, name="Actual", mode="lines"))
-                fig.add_trace(go.Scatter(x=test["ds"], y=y_pred, name="Predicted", mode="lines"))
-                fig.update_layout(
-                    title="Actual vs Predicted (Test Period)",
-                    xaxis_title="Date",
-                    yaxis_title="Price"
-                )
-                st.plotly_chart(fig, use_container_width=True)
+        if fcst.empty:
+            st.error("❌ Prophet produced an empty forecast. Check date continuity and frequency.")
+            st.stop()
 
-                # ---------------- Save Model State ----------------
-                ss._model_trained = model
-                ss._last_data = data
+        # ---------------- Metrics ----------------
+        y_true = test["y"].values
+        y_pred = fcst["yhat"].iloc[-len(test):].values
+        mae, rmse, mape = metrics(y_true, y_pred)
+        st.success(f"✅ MAE {mae:.4f} | RMSE {rmse:.4f} | MAPE {mape:.2f}%")
 
-            except Exception as e:
-                st.error(f"❌ Prophet training failed: {e}")
+        # ---------------- Plot ----------------
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=test["ds"], y=y_true, name="Actual", mode="lines"))
+        fig.add_trace(go.Scatter(x=test["ds"], y=y_pred, name="Predicted", mode="lines"))
+        fig.update_layout(
+            title="Actual vs Predicted (Test Period)",
+            xaxis_title="Date", yaxis_title="Price"
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-    else:
-        st.info("ℹ️ Please prepare your dataset in Tab 3 (Lag Features) or Tab 1 (Cleaned Data) first.")
+        ss._model_trained, ss._last_data = model, data
+
+    except Exception as e:
+        import traceback
+        st.error("💥 Prophet crashed — here’s the full traceback:")
+        st.code(traceback.format_exc())
+
 
 
 # ============================================================
