@@ -257,16 +257,15 @@ with tab5:
 # ============================================================
 # TAB 6 — Model & Metrics (final stable version)
 # ============================================================
+if isinstance(ss.get("df_raw"), dict):
+    st.error("❌ Multiple sheets detected. Please clean or select one sheet first.")
+    st.stop()
+
 with tab6:
     st.subheader("🤖 Prophet Model & Metrics")
 
     try:
-        # Guard: multi-sheet raw
-        if isinstance(ss.get("df_raw"), dict):
-            st.error("❌ Multiple sheets detected. Please clean or select one sheet first.")
-            st.stop()
-
-        # Load data (prefer final, else clean)
+        # ---------------- Load data ----------------
         data = ss.get("df_final")
         if data is None and ss.get("df_clean") is not None:
             tmp = ss.df_clean[[ss.date_col, ss.target_col]].dropna()
@@ -278,20 +277,20 @@ with tab6:
             st.info("Prepare dataset in Tab 3 or Tab 1 first.")
             st.stop()
 
-        # Clean & sanity checks
+        # ---------------- Clean ----------------
         data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
         data = data.dropna(subset=["ds"]).reset_index(drop=True)
         if len(data) < 20:
             st.error("❌ Not enough valid rows for training (need ≥ 20).")
             st.stop()
 
-        # Train/Test split
+        # ---------------- Train/Test split ----------------
         split = int(len(data) * (1 - test_pct / 100))
         train, test = data.iloc[:split], data.iloc[split:]
         freq_use = (freq or "D").strip().upper()
 
-        # Train Prophet
-        with st.spinner("Training Prophet model... (please wait)"):
+        # ---------------- Train Prophet ----------------
+        with st.spinner("Training Prophet model... (please wait 20–40 s)"):
             model = Prophet(
                 yearly_seasonality=yearly,
                 weekly_seasonality=weekly,
@@ -299,30 +298,31 @@ with tab6:
             )
             model.fit(train)
 
-        # Forecast
+        # ---------------- Forecast ----------------
         future = model.make_future_dataframe(periods=len(test), freq=freq_use)
         fcst = model.predict(future)[["ds", "yhat", "yhat_lower", "yhat_upper"]]
 
-        # Reduce size for stability
-        fcst = fcst[["ds", "yhat"]]
+        # ---------------- Reduce forecast size for stability ----------------
+        fcst = fcst[["ds", "yhat"]]  # only keep necessary columns
         test_plot = test.copy()
+
+        # Downsample for faster plotting
         if len(test_plot) > 1000:
             step = max(1, len(test_plot) // 1000)
             test_plot = test_plot.iloc[::step]
             st.warning(f"⚡ Downsampled to {len(test_plot)} points for faster plotting.")
 
-        # Metrics
+        # ---------------- Compute metrics ----------------
         y_true = test["y"].to_numpy()
         y_pred = fcst["yhat"].iloc[-len(test):].to_numpy()
         mae, rmse, mape = metrics(y_true, y_pred)
         st.success(f"✅ MAE {mae:.4f} | RMSE {rmse:.4f} | MAPE {mape:.2f}%")
 
-        # Plot
+        # ---------------- Plot ----------------
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=test_plot["ds"], y=test_plot["y"], name="Actual", mode="lines"))
         fig.add_trace(go.Scatter(
-            x=test_plot["ds"],
-            y=fcst["yhat"].iloc[-len(test_plot):],
+            x=test_plot["ds"], y=fcst["yhat"].iloc[-len(test_plot):],
             name="Predicted", mode="lines"
         ))
         fig.update_layout(
@@ -333,7 +333,7 @@ with tab6:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # Save for later tabs
+        # ---------------- Save model and data for next tabs ----------------
         ss._model_trained = model
         ss._last_data = data
 
@@ -343,6 +343,7 @@ with tab6:
         import traceback
         st.error("💥 Prophet crashed — here’s the full traceback:")
         st.code(traceback.format_exc())
+
 
 
 # ============================================================
@@ -375,7 +376,6 @@ with tab7:
         )
     else:
         st.info("Train model first in Tab 6.")
-
 
 # ============================================================
 # TAB 8 — Short-Term Forecast
