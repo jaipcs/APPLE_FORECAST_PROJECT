@@ -261,17 +261,27 @@ with tab5:
 
 
 # ============================================================
-# TAB 6 — Model & Metrics (final verified version)
+# TAB 6 — Model & Metrics (Debug-Safe Version)
 # ============================================================
 if isinstance(ss.get("df_raw"), dict):
     st.error("❌ Multiple sheets detected. Please clean or select one sheet first.")
     st.stop()
 
 with tab6:
-    st.subheader("🤖 Prophet Model & Metrics")
+    st.subheader("🤖 Prophet Model & Metrics (Debug Mode)")
+
+    # 🧠 Show what Streamlit has in memory
+    st.write("### Session Debug Info")
+    st.json({
+        "df_raw_exists": ss.get("df_raw") is not None,
+        "df_clean_exists": ss.get("df_clean") is not None,
+        "df_final_exists": ss.get("df_final") is not None,
+        "date_col": ss.get("date_col"),
+        "target_col": ss.get("target_col"),
+    })
 
     try:
-        # ---------------- Load and validate data ----------------
+        # ---------------- Load data ----------------
         data = ss.get("df_final")
         if data is None and ss.get("df_clean") is not None:
             tmp = ss.df_clean[[ss.date_col, ss.target_col]].dropna()
@@ -280,17 +290,19 @@ with tab6:
             data = data.dropna(subset=["ds"]).sort_values("ds").reset_index(drop=True)
 
         if data is None or not {"ds", "y"}.issubset(data.columns):
-            st.info("Prepare dataset in Tab 3 or Tab 1 first.")
+            st.error("⚠️ Data not ready. Please go to Tab 3 and click **Build Lags** first.")
             st.stop()
 
-        # ---------------- Data cleaning ----------------
+        # ---------------- Clean ----------------
         data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
         data = data.dropna(subset=["ds"]).reset_index(drop=True)
         if len(data) < 20:
-            st.error("❌ Not enough valid rows for training (need ≥ 20).")
+            st.error(f"❌ Only {len(data)} rows left — need ≥ 20.")
             st.stop()
 
-        # ---------------- Train/Test split ----------------
+        st.write("✅ Data ready for training:", data.head(3))
+
+        # ---------------- Split ----------------
         split = int(len(data) * (1 - test_pct / 100))
         if split <= 0 or split >= len(data):
             st.error("❌ Invalid test/train split. Adjust the test size slider.")
@@ -300,8 +312,10 @@ with tab6:
         test = data.iloc[split:].copy()
         freq_use = (freq or "D").strip().upper()
 
+        st.write(f"📊 Train shape: {train.shape}, Test shape: {test.shape}, Freq: {freq_use}")
+
         # ---------------- Train Prophet ----------------
-        with st.spinner("Training Prophet model... (please wait 20–40 s)"):
+        with st.spinner("Training Prophet model... (20–40 s)"):
             model = Prophet(
                 yearly_seasonality=yearly,
                 weekly_seasonality=weekly,
@@ -313,14 +327,7 @@ with tab6:
         future = model.make_future_dataframe(periods=len(test), freq=freq_use)
         fcst = model.predict(future)[["ds", "yhat", "yhat_lower", "yhat_upper"]]
 
-        # ---------------- Reduce forecast size for stability ----------------
-        fcst = fcst[["ds", "yhat"]]
-        test_plot = test.copy()
-
-        if len(test_plot) > 1000:
-            step = max(1, len(test_plot) // 1000)
-            test_plot = test_plot.iloc[::step]
-            st.warning(f"⚡ Downsampled to {len(test_plot)} points for faster plotting.")
+        st.write("✅ Forecast sample:", fcst.tail(3))
 
         # ---------------- Metrics ----------------
         y_true = test["y"].to_numpy()
@@ -330,11 +337,11 @@ with tab6:
 
         # ---------------- Plot ----------------
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=test_plot["ds"], y=test_plot["y"],
-                                 name="Actual", mode="lines"))
-        fig.add_trace(go.Scatter(x=test_plot["ds"],
-                                 y=fcst["yhat"].iloc[-len(test_plot):],
-                                 name="Predicted", mode="lines"))
+        fig.add_trace(go.Scatter(x=test["ds"], y=test["y"], name="Actual", mode="lines"))
+        fig.add_trace(go.Scatter(
+            x=test["ds"], y=fcst["yhat"].iloc[-len(test):],
+            name="Predicted", mode="lines"
+        ))
         fig.update_layout(title="Actual vs Predicted (Test Period)",
                           xaxis_title="Date", yaxis_title="Price", height=500)
         st.plotly_chart(fig, use_container_width=True)
@@ -344,10 +351,11 @@ with tab6:
         ss._last_data = data
         st.success("✅ Prophet model trained and forecast completed successfully!")
 
-    except Exception:
+    except Exception as e:
         import traceback
-        st.error("💥 Prophet crashed — here’s the full traceback:")
+        st.error("💥 Prophet crashed — traceback below:")
         st.code(traceback.format_exc())
+
 
 
 
@@ -383,6 +391,7 @@ with tab7:
         )
     else:
         st.info("Train model first in Tab 6.")
+
 
 
 
