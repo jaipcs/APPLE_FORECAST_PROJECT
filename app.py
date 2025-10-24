@@ -3,6 +3,7 @@
 # Cleaned & Colab-ready version (Streamlit)
 # ============================================================
 
+
 import io
 import numpy as np
 import pandas as pd
@@ -12,12 +13,14 @@ import streamlit as st
 from prophet import Prophet
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
+
 # ------------------------------ #
 # Streamlit page config
 # ------------------------------ #
 st.set_page_config(page_title="📈 Stock Prophet Forecast Dashboard", layout="wide")
 st.title("📈 Stock Prophet Forecast Dashboard")
 st.caption("Upload an Excel file → clean & explore → engineer lag features → forecast with Prophet.")
+
 
 # ------------------------------ #
 # Helpers
