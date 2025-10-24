@@ -358,20 +358,91 @@ with tab6:
 
 
 
+# ============================================================
+# TAB 7 — Short-Term Forecast (Stable & Safe)
+# ============================================================
+with tab8:
+    st.subheader("📅 Short-Term Forecast (7–365 days)")
 
+    # Rebuild model and data if lost
+    model = ss.get("_model_trained")
+    data = ss.get("_last_data") or ss.get("df_final")
 
+    if model is None:
+        st.error("⚠️ No trained model found. Please train it first in Tab 6.")
+        st.stop()
+
+    if data is None or not {"ds", "y"}.issubset(data.columns):
+        st.error("⚠️ Missing or invalid data. Re-run Tab 6 or rebuild lags.")
+        st.stop()
+
+    try:
+        # --- Horizon and frequency ---
+        horizon = st.slider("Forecast Horizon (days)", 7, 365, 30)
+        freq_use = (freq or "D").strip().upper()
+
+        # --- Forecast ---
+        future = model.make_future_dataframe(periods=horizon, freq=freq_use)
+        fcst = model.predict(future)
+
+        # --- Plot ---
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=data["ds"], y=data["y"], name="History", mode="lines"))
+        fig.add_trace(go.Scatter(x=fcst["ds"], y=fcst["yhat"], name="Forecast", mode="lines"))
+        fig.add_trace(go.Scatter(
+            x=fcst["ds"], y=fcst["yhat_upper"],
+            mode="lines", line=dict(width=0), showlegend=False
+        ))
+        fig.add_trace(go.Scatter(
+            x=fcst["ds"], y=fcst["yhat_lower"],
+            mode="lines", fill="tonexty", line=dict(width=0), showlegend=False
+        ))
+        fig.update_layout(
+            title=f"Short-Term Forecast ({horizon} days)",
+            xaxis_title="Date",
+            yaxis_title="Price",
+            height=500
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        # --- Download ---
+        st.download_button(
+            "📥 Download Short-Term Forecast",
+            data=df_to_excel_bytes(fcst[["ds", "yhat", "yhat_lower", "yhat_upper"]]),
+            file_name=f"forecast_{horizon}d.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    except Exception:
+        import traceback
+        st.error("💥 Short-term forecast crashed — here’s the traceback:")
+        st.code(traceback.format_exc())
 
 # ============================================================
-# TAB 7 — 5-Year Forecast
+# TAB 8 — 5-Year Forecast (Stable)
 # ============================================================
 with tab7:
     st.subheader("📈 5-Year Forecast")
-    if "_model_trained" in ss and ss._model_trained:
-        model = ss._model_trained
+
+    # Rebuild model/data if lost
+    model = ss.get("_model_trained")
+    data = ss.get("_last_data") or ss.get("df_final")
+
+    if model is None:
+        st.error("⚠️ No trained model found. Train the model first in Tab 6.")
+        st.stop()
+
+    if data is None or not {"ds", "y"}.issubset(data.columns):
+        st.error("⚠️ Could not find data to plot. Re-run Tab 6 or rebuild lags.")
+        st.stop()
+
+    try:
+        # 5-year = 1825 days
         future = model.make_future_dataframe(periods=1825, freq="D")
         fcst = model.predict(future)
+
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=ss._last_data["ds"], y=ss._last_data["y"], name="History"))
+        fig.add_trace(go.Scatter(x=data["ds"], y=data["y"], name="History"))
         fig.add_trace(go.Scatter(x=fcst["ds"], y=fcst["yhat"], name="Forecast"))
         fig.add_trace(go.Scatter(
             x=fcst["ds"], y=fcst["yhat_upper"], mode="lines",
@@ -383,51 +454,17 @@ with tab7:
         ))
         fig.update_layout(title="5-Year Forecast", xaxis_title="Date", yaxis_title="Price")
         st.plotly_chart(fig, use_container_width=True)
+
         st.download_button(
             "📥 Download 5-Year Forecast",
             data=df_to_excel_bytes(fcst[["ds", "yhat", "yhat_lower", "yhat_upper"]]),
             file_name="forecast_5y.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-    else:
-        st.info("Train model first in Tab 6.")
 
+    except Exception:
+        import traceback
+        st.error("💥 Forecast crashed — here’s the traceback:")
+        st.code(traceback.format_exc())
 
-
-
-# ============================================================
-# TAB 8 — Short-Term Forecast
-# ============================================================
-with tab8:
-    st.subheader("📅 Short-Term Forecast")
-    if "_model_trained" in ss and ss._model_trained:
-        horizon = st.slider("Horizon (days)", 7, 365, 90)
-        model = ss._model_trained
-        freq_use = (freq or "D").strip().upper()
-        future = model.make_future_dataframe(periods=horizon, freq=freq_use)
-        fcst = model.predict(future)
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=ss._last_data["ds"], y=ss._last_data["y"], name="History"))
-        fig.add_trace(go.Scatter(x=fcst["ds"], y=fcst["yhat"], name="Forecast"))
-        fig.add_trace(go.Scatter(
-            x=fcst["ds"], y=fcst["yhat_upper"], mode="lines",
-            line=dict(width=0), showlegend=False
-        ))
-        fig.add_trace(go.Scatter(
-            x=fcst["ds"], y=fcst["yhat_lower"], mode="lines",
-            fill="tonexty", line=dict(width=0), showlegend=False
-        ))
-        fig.update_layout(
-            title=f"Short-Term Forecast ({horizon} days)",
-            xaxis_title="Date", yaxis_title="Price"
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        st.download_button(
-            "📥 Download Short-Term Forecast",
-            data=df_to_excel_bytes(fcst[["ds", "yhat", "yhat_lower", "yhat_upper"]]),
-            file_name=f"forecast_{horizon}d.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    else:
-        st.info("Train model first in Tab 6.")
 
