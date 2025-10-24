@@ -35,18 +35,21 @@ def load_excel(file, sheet_name=None):
         data = data[first_sheet]
     return data
 
-    
+
 def coerce_datetime(df, col):
     return pd.to_datetime(df[col], errors="coerce")
+
 
 def metrics(y_true, y_pred):
     y_true = np.asarray(y_true).reshape(-1)
     y_pred = np.asarray(y_pred).reshape(-1)[: len(y_true)]
     mae = mean_absolute_error(y_true, y_pred)
     rmse = mean_squared_error(y_true, y_pred, squared=False)
-    mape = float(np.mean(np.abs((y_true - y_pred) /
-               np.clip(np.abs(y_true), 1e-12, None))) * 100.0)
+    mape = float(
+        np.mean(np.abs((y_true - y_pred) / np.clip(np.abs(y_true), 1e-12, None))) * 100.0
+    )
     return mae, rmse, mape
+
 
 def build_lags(df, target_col, max_lag=5):
     out = df.copy()
@@ -54,11 +57,25 @@ def build_lags(df, target_col, max_lag=5):
         out[f"{target_col}_lag{k}"] = out[target_col].shift(k)
     return out
 
+
 def df_to_excel_bytes(df):
     buf = io.BytesIO()
     df.to_excel(buf, index=False)
     buf.seek(0)
     return buf
+
+
+# ✅ NEW: Safe DataFrame getter to prevent "ambiguous truth value" errors
+def get_latest_df(ss):
+    """Return the latest available dataframe from Streamlit session_state."""
+    if ss.get("df_final") is not None:
+        return ss.df_final
+    elif ss.get("df_clean") is not None:
+        return ss.df_clean
+    elif ss.get("df_raw") is not None:
+        return ss.df_raw
+    return None
+
 
 # ------------------------------ #
 # Session state
@@ -211,18 +228,13 @@ with tab5:
         st.stop()
 
     # ✅ Choose the most processed version of data
-    src = None
-    if ss.get("df_final") is not None:
-        src = ss.df_final
-    elif ss.get("df_clean") is not None:
-        src = ss.df_clean
-    elif ss.get("df_raw") is not None:
-        src = ss.df_raw
-
+    src = get_latest_df(ss)  # safely returns df_final, df_clean, or df_raw
+    
     if src is not None:
         if not isinstance(src, pd.DataFrame):
             st.error("❌ Invalid data format (expected DataFrame). Please reload a single-sheet Excel file.")
             st.stop()
+
 
         # ✅ Handle column mapping for either cleaned or final dataset
         if {"y", "ds"}.issubset(src.columns):
