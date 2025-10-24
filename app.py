@@ -257,7 +257,7 @@ with tab5:
 
 
 # ============================================================
-# TAB 6 — Model & Metrics (safe debug version)
+# TAB 6 — Model & Metrics (final stable version)
 # ============================================================
 if isinstance(ss.get("df_raw"), dict):
     st.error("❌ Multiple sheets detected. Please clean or select one sheet first.")
@@ -267,6 +267,7 @@ with tab6:
     st.subheader("🤖 Prophet Model & Metrics")
 
     try:
+        # ---------------- Load data ----------------
         data = ss.get("df_final")
         if data is None and ss.get("df_clean") is not None:
             tmp = ss.df_clean[[ss.date_col, ss.target_col]].dropna()
@@ -274,15 +275,11 @@ with tab6:
             data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
             data = data.dropna(subset=["ds"]).sort_values("ds").reset_index(drop=True)
 
-        # ---------------- Validate ----------------
-        if data is None:
+        if data is None or not {"ds", "y"}.issubset(data.columns):
             st.info("Prepare dataset in Tab 3 or Tab 1 first.")
             st.stop()
 
-        if not {"ds", "y"}.issubset(data.columns):
-            st.error("❌ Columns 'ds' and 'y' not found. Please ensure lag features or cleaning were done.")
-            st.stop()
-
+        # ---------------- Clean ----------------
         data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
         data = data.dropna(subset=["ds"]).reset_index(drop=True)
         if len(data) < 20:
@@ -295,7 +292,7 @@ with tab6:
         freq_use = (freq or "D").strip().upper()
 
         # ---------------- Train Prophet ----------------
-        with st.spinner("Training Prophet model..."):
+        with st.spinner("Training Prophet model... (please wait 20–40 s)"):
             model = Prophet(
                 yearly_seasonality=yearly,
                 weekly_seasonality=weekly,
@@ -305,35 +302,45 @@ with tab6:
 
         # ---------------- Forecast ----------------
         future = model.make_future_dataframe(periods=len(test), freq=freq_use)
-        fcst = model.predict(future)
+        fcst = model.predict(future)[["ds", "yhat", "yhat_lower", "yhat_upper"]]
 
-        if fcst.empty:
-            st.error("❌ Prophet produced an empty forecast. Check date continuity and frequency.")
-            st.stop()
-
-        # ---------------- Metrics ----------------
-        y_true = test["y"].values
-        y_pred = fcst["yhat"].iloc[-len(test):].values
+        # ---------------- Compute metrics ----------------
+        y_true = test["y"].to_numpy()
+        y_pred = fcst["yhat"].iloc[-len(test):].to_numpy()
         mae, rmse, mape = metrics(y_true, y_pred)
         st.success(f"✅ MAE {mae:.4f} | RMSE {rmse:.4f} | MAPE {mape:.2f}%")
 
+        # ---------------- Downsample for plotting ----------------
+        test_plot = test.copy()
+        if len(test_plot) > 1000:
+            step = max(1, len(test_plot)//1000)
+            test_plot = test_plot.iloc[::step]
+            st.warning(f"⚡ Downsampled to {len(test_plot)} points for faster plotting.")
+
         # ---------------- Plot ----------------
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=test["ds"], y=y_true, name="Actual", mode="lines"))
-        fig.add_trace(go.Scatter(x=test["ds"], y=y_pred, name="Predicted", mode="lines"))
+        fig.add_trace(go.Scatter(x=test_plot["ds"], y=test_plot["y"], name="Actual", mode="lines"))
+        fig.add_trace(go.Scatter(
+            x=test_plot["ds"], y=fcst["yhat"].iloc[-len(test_plot):], name="Predicted", mode="lines"
+        ))
         fig.update_layout(
             title="Actual vs Predicted (Test Period)",
-            xaxis_title="Date", yaxis_title="Price"
+            xaxis_title="Date",
+            yaxis_title="Price",
+            height=500
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
-        ss._model_trained, ss._last_data = model, data
+        # ---------------- Save model and data for next tabs ----------------
+        ss._model_trained = model
+        ss._last_data = data
+
+        st.success("✅ Prophet model trained and forecast completed successfully!")
 
     except Exception as e:
         import traceback
         st.error("💥 Prophet crashed — here’s the full traceback:")
         st.code(traceback.format_exc())
-
 
 
 # ============================================================
