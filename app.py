@@ -301,47 +301,45 @@ with tab6:
             model.fit(train)
 
         # ---------------- Forecast ----------------
-        future = model.make_future_dataframe(periods=len(test), freq=freq_use)
-        fcst = model.predict(future)[["ds", "yhat", "yhat_lower", "yhat_upper"]]
+future = model.make_future_dataframe(periods=len(test), freq=freq_use)
+fcst = model.predict(future)[["ds", "yhat", "yhat_lower", "yhat_upper"]]
 
-        # ---------------- Compute metrics ----------------
-        y_true = test["y"].to_numpy()
-        y_pred = fcst["yhat"].iloc[-len(test):].to_numpy()
-        mae, rmse, mape = metrics(y_true, y_pred)
-        st.success(f"✅ MAE {mae:.4f} | RMSE {rmse:.4f} | MAPE {mape:.2f}%")
+# ---------------- Reduce forecast size for stability ----------------
+fcst = fcst[["ds", "yhat"]]  # only keep necessary columns
+test_plot = test.copy()
 
-        # ---------------- Downsample for plotting ----------------
-        test_plot = test.copy()
-        if len(test_plot) > 1000:
-            step = max(1, len(test_plot)//1000)
-            test_plot = test_plot.iloc[::step]
-            st.warning(f"⚡ Downsampled to {len(test_plot)} points for faster plotting.")
+# Downsample for faster plotting
+if len(test_plot) > 1000:
+    step = max(1, len(test_plot) // 1000)
+    test_plot = test_plot.iloc[::step]
+    st.warning(f"⚡ Downsampled to {len(test_plot)} points for faster plotting.")
 
-        # ---------------- Plot ----------------
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=test_plot["ds"], y=test_plot["y"], name="Actual", mode="lines"))
-        fig.add_trace(go.Scatter(
-            x=test_plot["ds"], y=fcst["yhat"].iloc[-len(test_plot):], name="Predicted", mode="lines"
-        ))
-        fig.update_layout(
-            title="Actual vs Predicted (Test Period)",
-            xaxis_title="Date",
-            yaxis_title="Price",
-            height=500
-        )
-        st.plotly_chart(fig, width="stretch")
+# ---------------- Compute metrics ----------------
+y_true = test["y"].to_numpy()
+y_pred = fcst["yhat"].iloc[-len(test):].to_numpy()
+mae, rmse, mape = metrics(y_true, y_pred)
+st.success(f"✅ MAE {mae:.4f} | RMSE {rmse:.4f} | MAPE {mape:.2f}%")
 
-        # ---------------- Save model and data for next tabs ----------------
-        ss._model_trained = model
-        ss._last_data = data
+# ---------------- Plot ----------------
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=test_plot["ds"], y=test_plot["y"], name="Actual", mode="lines"))
+fig.add_trace(go.Scatter(
+    x=test_plot["ds"], y=fcst["yhat"].iloc[-len(test_plot):],
+    name="Predicted", mode="lines"
+))
+fig.update_layout(
+    title="Actual vs Predicted (Test Period)",
+    xaxis_title="Date",
+    yaxis_title="Price",
+    height=500
+)
+st.plotly_chart(fig, use_container_width=True)
 
-        st.success("✅ Prophet model trained and forecast completed successfully!")
+# ---------------- Save model and data for next tabs ----------------
+ss._model_trained = model
+ss._last_data = data
 
-    except Exception as e:
-        import traceback
-        st.error("💥 Prophet crashed — here’s the full traceback:")
-        st.code(traceback.format_exc())
-
+st.success("✅ Prophet model trained and forecast completed successfully!")
 
 # ============================================================
 # TAB 7 — 5-Year Forecast
