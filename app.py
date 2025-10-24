@@ -98,6 +98,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📅 Short-Term Forecast",
 ])
 
+
 # ============================================================
 # TAB 1 — Raw & Missing
 # ============================================================
@@ -157,6 +158,7 @@ with tab1:
     else:
         st.info("Upload an Excel file to begin.")
 
+
 # ============================================================
 # TAB 2 — Correlation Heatmap
 # ============================================================
@@ -177,6 +179,7 @@ with tab2:
             st.warning("Need ≥2 numeric columns.")
     else:
         st.info("Clean data first in Tab 1.")
+
 
 # ============================================================
 # TAB 3 — Lag Features
@@ -201,6 +204,7 @@ with tab3:
     else:
         st.info("Prepare cleaned data first.")
 
+
 # ============================================================
 # TAB 4 — Final Data
 # ============================================================
@@ -217,6 +221,7 @@ with tab4:
         )
     else:
         st.info("Build lags in Tab 3.")
+
 
 # ============================================================
 # TAB 5 — Stock Overview
@@ -253,7 +258,7 @@ with tab5:
             st.warning("⚠️ Could not find matching Date and Price columns to plot.")
     else:
         st.info("ℹ️ Please upload and prepare your data first in previous tabs.")
-
+        
 # ============================================================
 # TAB 6 — Model & Metrics (final stable version)
 # ============================================================
@@ -265,31 +270,13 @@ with tab6:
     st.subheader("🤖 Prophet Model & Metrics")
 
     try:
-        # ---------------- Load data ----------------
-        data = ss.get("df_final")
-        if data is None and ss.get("df_clean") is not None:
-            tmp = ss.df_clean[[ss.date_col, ss.target_col]].dropna()
-            data = tmp.rename(columns={ss.date_col: "ds", ss.target_col: "y"})
-            data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
-            data = data.dropna(subset=["ds"]).sort_values("ds").reset_index(drop=True)
-
-        if data is None or not {"ds", "y"}.issubset(data.columns):
-            st.info("Prepare dataset in Tab 3 or Tab 1 first.")
-            st.stop()
-
-        # ---------------- Clean ----------------
-        data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
-        data = data.dropna(subset=["ds"]).reset_index(drop=True)
-        if len(data) < 20:
-            st.error("❌ Not enough valid rows for training (need ≥ 20).")
-            st.stop()
-
-        # ---------------- Train/Test split ----------------
-        split = int(len(data) * (1 - test_pct / 100))
-        train, test = data.iloc[:split], data.iloc[split:]
-        freq_use = (freq or "D").strip().upper()
-
-        # ---------------- Train Prophet ----------------
+        # ✅ load data
+        ...
+        # ✅ clean
+        ...
+        # ✅ split
+        ...
+        # ✅ train
         with st.spinner("Training Prophet model... (please wait 20–40 s)"):
             model = Prophet(
                 yearly_seasonality=yearly,
@@ -298,42 +285,29 @@ with tab6:
             )
             model.fit(train)
 
-        # ---------------- Forecast ----------------
+        # ✅ forecast, metrics, plots, and save
         future = model.make_future_dataframe(periods=len(test), freq=freq_use)
         fcst = model.predict(future)[["ds", "yhat", "yhat_lower", "yhat_upper"]]
 
-        # ---------------- Reduce forecast size for stability ----------------
-        fcst = fcst[["ds", "yhat"]]  # only keep necessary columns
+        fcst = fcst[["ds", "yhat"]]
         test_plot = test.copy()
 
-        # Downsample for faster plotting
         if len(test_plot) > 1000:
             step = max(1, len(test_plot) // 1000)
             test_plot = test_plot.iloc[::step]
             st.warning(f"⚡ Downsampled to {len(test_plot)} points for faster plotting.")
 
-        # ---------------- Compute metrics ----------------
         y_true = test["y"].to_numpy()
         y_pred = fcst["yhat"].iloc[-len(test):].to_numpy()
         mae, rmse, mape = metrics(y_true, y_pred)
         st.success(f"✅ MAE {mae:.4f} | RMSE {rmse:.4f} | MAPE {mape:.2f}%")
 
-        # ---------------- Plot ----------------
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=test_plot["ds"], y=test_plot["y"], name="Actual", mode="lines"))
-        fig.add_trace(go.Scatter(
-            x=test_plot["ds"], y=fcst["yhat"].iloc[-len(test_plot):],
-            name="Predicted", mode="lines"
-        ))
-        fig.update_layout(
-            title="Actual vs Predicted (Test Period)",
-            xaxis_title="Date",
-            yaxis_title="Price",
-            height=500
-        )
+        fig.add_trace(go.Scatter(x=test_plot["ds"], y=fcst["yhat"].iloc[-len(test_plot):], name="Predicted", mode="lines"))
+        fig.update_layout(title="Actual vs Predicted (Test Period)", xaxis_title="Date", yaxis_title="Price", height=500)
         st.plotly_chart(fig, use_container_width=True)
 
-        # ---------------- Save model and data for next tabs ----------------
         ss._model_trained = model
         ss._last_data = data
 
@@ -343,7 +317,6 @@ with tab6:
         import traceback
         st.error("💥 Prophet crashed — here’s the full traceback:")
         st.code(traceback.format_exc())
-
 
 
 # ============================================================
