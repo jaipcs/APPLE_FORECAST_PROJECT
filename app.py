@@ -31,7 +31,6 @@ def load_excel(file, sheet_name=None):
         st.warning(f"Multiple sheets detected. Using first sheet: '{first_sheet}'")
         data = data[first_sheet]
     return data
-
 def coerce_datetime(df, col):
     return pd.to_datetime(df[col], errors="coerce")
 
