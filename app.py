@@ -24,13 +24,15 @@ st.caption("Upload an Excel file → clean & explore → engineer lag features �
 # ------------------------------ #
 @st.cache_data(show_spinner=False)
 def load_excel(file, sheet_name=None):
-    """Loads Excel, even multi-sheet workbooks."""
     data = pd.read_excel(file, sheet_name=sheet_name if sheet_name else 0)
     if isinstance(data, dict):
+        # multiple sheets detected
         first_sheet = list(data.keys())[0]
-        st.warning(f"Multiple sheets detected. Using first sheet: '{first_sheet}'")
+        st.warning(f"Multiple sheets detected — using first sheet: {first_sheet}")
         data = data[first_sheet]
     return data
+
+    
 def coerce_datetime(df, col):
     return pd.to_datetime(df[col], errors="coerce")
 
@@ -194,21 +196,26 @@ with tab4:
         st.info("Build lags in Tab 3.")
 
 # ============================================================
-# ------------------------------
+
 # Tab 5: Stock Overview
 # ------------------------------
 with tab5:
     st.subheader("📊 Stock Overview")
 
-    src = None
-    if ss.get("df_final") is not None:
-        src = ss.df_final
-    elif ss.get("df_clean") is not None:
-        src = ss.df_clean
-    elif ss.get("df_raw") is not None:
-        src = ss.df_raw
+    # ✅ Guard: prevent multi-sheet dict issue
+    if isinstance(ss.df_raw, dict):
+        st.error("❌ Your uploaded Excel contains multiple sheets. Please clean or select one sheet first.")
+        st.stop()
+
+    # ✅ Choose the most processed version of data
+    src = ss.get("df_final") or ss.get("df_clean") or ss.get("df_raw")
 
     if src is not None:
+        if not isinstance(src, pd.DataFrame):
+            st.error("❌ Invalid data format (expected DataFrame). Please reload a single-sheet Excel file.")
+            st.stop()
+
+        # ✅ Handle column mapping for either cleaned or final dataset
         if {"y", "ds"}.issubset(src.columns):
             plot_df = src.rename(columns={"ds": "Date", "y": "Price"})
         elif ss.date_col and ss.target_col and {ss.date_col, ss.target_col}.issubset(src.columns):
@@ -216,12 +223,16 @@ with tab5:
         else:
             plot_df = None
 
+        # ✅ Plot only if columns are valid
         if plot_df is not None:
             fig = px.line(plot_df, x="Date", y="Price", title="Historical Stock Price")
-            st.plotly_chart(fig, width='stretch')
-            st.dataframe(plot_df["Price"].describe().to_frame(), width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
+            st.markdown("### Basic Stats")
+            st.dataframe(plot_df["Price"].describe().to_frame(), use_container_width=True)
+        else:
+            st.warning("⚠️ Could not find matching Date and Price columns to plot.")
     else:
-        st.info("No data yet.")
+        st.info("ℹ️ Please upload and prepare your data first in previous tabs.")
 
 
 # ============================================================
@@ -230,16 +241,25 @@ with tab5:
 with tab6:
     st.subheader("🤖 Prophet Model & Metrics")
 
+    # ✅ Guard: prevent multi-sheet dict issue
+    if isinstance(ss.df_raw, dict):
+        st.error("❌ Your uploaded Excel contains multiple sheets. Please clean or select one sheet first.")
+        st.stop()
+
     # ---------------- Validate data ----------------
     data = ss.df_final
     if data is None and ss.df_clean is not None:
-        tmp = ss.df_clean[[ss.date_col, ss.target_col]].dropna()
-        data = tmp.rename(columns={ss.date_col: "ds", ss.target_col: "y"})
-        data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
-        data = data.dropna(subset=["ds"]).sort_values("ds").reset_index(drop=True)
+        try:
+            tmp = ss.df_clean[[ss.date_col, ss.target_col]].dropna()
+            data = tmp.rename(columns={ss.date_col: "ds", ss.target_col: "y"})
+            data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
+            data = data.dropna(subset=["ds"]).sort_values("ds").reset_index(drop=True)
+        except Exception as e:
+            st.error(f"⚠️ Could not prepare data: {e}")
+            st.stop()
 
     # ---------------- Check data validity ----------------
-    if data is not None and {"ds", "y"}.issubset(data.columns):
+    if data is not None and isinstance(data, pd.DataFrame) and {"ds", "y"}.issubset(data.columns):
         data["ds"] = pd.to_datetime(data["ds"], errors="coerce")
         data = data.dropna(subset=["ds"]).reset_index(drop=True)
 
@@ -247,9 +267,11 @@ with tab6:
             st.error("❌ Not enough rows for training. Need ≥ 20 valid records.")
         else:
             try:
+                # ---------------- Train/Test Split ----------------
                 split = int(len(data) * (1 - test_pct / 100))
                 train, test = data.iloc[:split], data.iloc[split:]
 
+                # ---------------- Train Prophet ----------------
                 with st.spinner("Training Prophet model..."):
                     model = Prophet(
                         yearly_seasonality=yearly,
@@ -258,7 +280,7 @@ with tab6:
                     )
                     model.fit(train)
 
-                # ---------------- Forecasting ----------------
+                # ---------------- Forecast ----------------
                 freq_use = freq.strip().upper() if freq.strip() else "D"
                 future = model.make_future_dataframe(periods=len(test), freq=freq_use)
                 fcst = model.predict(future)
@@ -280,7 +302,7 @@ with tab6:
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
-                # ---------------- Save model ----------------
+                # ---------------- Save Model State ----------------
                 ss._model_trained = model
                 ss._last_data = data
 
@@ -288,7 +310,7 @@ with tab6:
                 st.error(f"❌ Prophet training failed: {e}")
 
     else:
-        st.info("Prepare dataset in Tab 3 or Tab 1 first.")
+        st.info("ℹ️ Please prepare your dataset in Tab 3 (Lag Features) or Tab 1 (Cleaned Data) first.")
 
 
 # ============================================================
@@ -342,8 +364,5 @@ with tab8:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     else:
         st.info("Train model first in Tab 6.")
-
-
-
 
 
