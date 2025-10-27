@@ -361,7 +361,7 @@ with tab6:
 # ============================================================
 # TAB 7 — Short-Term Forecast (Stable & Safe)
 # ============================================================
-with tab8:
+with tab7:
     st.subheader("📅 Short-Term Forecast (7–365 days)")
 
     # Rebuild model and data if lost
@@ -421,7 +421,7 @@ with tab8:
 # ============================================================
 # TAB 8 — 5-Year Forecast (Stable)
 # ============================================================
-with tab7:
+with tab8:
     st.subheader("📈 5-Year Forecast")
 
     # Rebuild model/data if lost
