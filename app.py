@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from prophet import Prophet
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+import traceback  
 
 # ------------------------------ #
 # Streamlit page config
