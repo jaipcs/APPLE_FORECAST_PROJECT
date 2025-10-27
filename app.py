@@ -357,31 +357,28 @@ with tab6:
         st.code(traceback.format_exc())
 
 
-
 # ============================================================
-# TAB 7 — Short-Term Forecast (Stable & Safe)
+# TAB 7 — Short-Term Forecast (Stable)
 # ============================================================
 with tab7:
     st.subheader("📅 Short-Term Forecast (7–365 days)")
 
-    # Rebuild model and data if lost
     model = ss.get("_model_trained")
     data = ss.get("_last_data") or ss.get("df_final")
+    freq = ss.get("freq", "D")  # ensure default freq
 
-    if model is None:
-        st.error("⚠️ No trained model found. Please train it first in Tab 6.")
+    if model is None or not hasattr(model, "predict"):
+        st.error("⚠️ No trained model found. Please train it in Tab 6 first.")
         st.stop()
 
     if data is None or not {"ds", "y"}.issubset(data.columns):
-        st.error("⚠️ Missing or invalid data. Re-run Tab 6 or rebuild lags.")
+        st.error("⚠️ Missing or invalid data. Please re-run Tab 6.")
         st.stop()
 
     try:
-        # --- Horizon and frequency ---
-        horizon = st.slider("Forecast Horizon (days)", 7, 365, 30)
+        horizon = st.slider("Forecast horizon (days)", 7, 365, 90)
         freq_use = (freq or "D").strip().upper()
 
-        # --- Forecast ---
         future = model.make_future_dataframe(periods=horizon, freq=freq_use)
         fcst = model.predict(future)
 
@@ -389,21 +386,11 @@ with tab7:
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=data["ds"], y=data["y"], name="History", mode="lines"))
         fig.add_trace(go.Scatter(x=fcst["ds"], y=fcst["yhat"], name="Forecast", mode="lines"))
-        fig.add_trace(go.Scatter(
-            x=fcst["ds"], y=fcst["yhat_upper"],
-            mode="lines", line=dict(width=0), showlegend=False
-        ))
-        fig.add_trace(go.Scatter(
-            x=fcst["ds"], y=fcst["yhat_lower"],
-            mode="lines", fill="tonexty", line=dict(width=0), showlegend=False
-        ))
-        fig.update_layout(
-            title=f"Short-Term Forecast ({horizon} days)",
-            xaxis_title="Date",
-            yaxis_title="Price",
-            height=500
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        fig.add_trace(go.Scatter(x=fcst["ds"], y=fcst["yhat_upper"], mode="lines", line=dict(width=0), showlegend=False))
+        fig.add_trace(go.Scatter(x=fcst["ds"], y=fcst["yhat_lower"], mode="lines", fill="tonexty", line=dict(width=0), showlegend=False))
+        fig.update_layout(title=f"📅 Short-Term Forecast ({horizon} days)",
+                          xaxis_title="Date", yaxis_title="Price", height=500)
+        st.plotly_chart(fig, width="stretch")
 
         # --- Download ---
         st.download_button(
@@ -415,45 +402,40 @@ with tab7:
 
     except Exception:
         import traceback
-        st.error("💥 Short-term forecast crashed — here’s the traceback:")
+        st.error("💥 Short-Term Forecast crashed — traceback below:")
         st.code(traceback.format_exc())
 
+
+
 # ============================================================
-# TAB 8 — 5-Year Forecast (Stable)
+# TAB 8 — Long-Term Forecast (5-Year Horizon)
 # ============================================================
 with tab8:
-    st.subheader("📈 5-Year Forecast")
+    st.subheader("📈 Long-Term Forecast (5 Years)")
 
-    # Rebuild model/data if lost
     model = ss.get("_model_trained")
     data = ss.get("_last_data") or ss.get("df_final")
 
-    if model is None:
-        st.error("⚠️ No trained model found. Train the model first in Tab 6.")
+    if model is None or not hasattr(model, "predict"):
+        st.error("⚠️ No trained model found. Train it in Tab 6 first.")
         st.stop()
 
     if data is None or not {"ds", "y"}.issubset(data.columns):
-        st.error("⚠️ Could not find data to plot. Re-run Tab 6 or rebuild lags.")
+        st.error("⚠️ Missing data or columns (ds, y). Please re-run Tab 6.")
         st.stop()
 
     try:
-        # 5-year = 1825 days
         future = model.make_future_dataframe(periods=1825, freq="D")
         fcst = model.predict(future)
 
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=data["ds"], y=data["y"], name="History"))
-        fig.add_trace(go.Scatter(x=fcst["ds"], y=fcst["yhat"], name="Forecast"))
-        fig.add_trace(go.Scatter(
-            x=fcst["ds"], y=fcst["yhat_upper"], mode="lines",
-            line=dict(width=0), showlegend=False
-        ))
-        fig.add_trace(go.Scatter(
-            x=fcst["ds"], y=fcst["yhat_lower"], mode="lines",
-            fill="tonexty", line=dict(width=0), showlegend=False
-        ))
-        fig.update_layout(title="5-Year Forecast", xaxis_title="Date", yaxis_title="Price")
-        st.plotly_chart(fig, use_container_width=True)
+        fig.add_trace(go.Scatter(x=data["ds"], y=data["y"], name="History", mode="lines"))
+        fig.add_trace(go.Scatter(x=fcst["ds"], y=fcst["yhat"], name="Forecast", mode="lines"))
+        fig.add_trace(go.Scatter(x=fcst["ds"], y=fcst["yhat_upper"], mode="lines", line=dict(width=0), showlegend=False))
+        fig.add_trace(go.Scatter(x=fcst["ds"], y=fcst["yhat_lower"], mode="lines", fill="tonexty", line=dict(width=0), showlegend=False))
+        fig.update_layout(title="📈 Long-Term (5-Year) Forecast",
+                          xaxis_title="Date", yaxis_title="Price", height=500)
+        st.plotly_chart(fig, width="stretch")
 
         st.download_button(
             "📥 Download 5-Year Forecast",
@@ -464,7 +446,5 @@ with tab8:
 
     except Exception:
         import traceback
-        st.error("💥 Forecast crashed — here’s the traceback:")
+        st.error("💥 5-Year Forecast crashed — traceback below:")
         st.code(traceback.format_exc())
-
-
