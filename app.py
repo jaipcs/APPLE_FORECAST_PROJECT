@@ -233,7 +233,6 @@ with tab4:
     else:
         st.info("Build lags in Tab 3.")
 
-
 # ============================================================
 # TAB 5 — Stock Overview
 # ============================================================
@@ -269,6 +268,7 @@ with tab5:
             st.warning("⚠️ Could not find matching Date and Price columns to plot.")
     else:
         st.info("ℹ️ Please upload and prepare your data first in previous tabs.")
+
 
 
 # ============================================================
