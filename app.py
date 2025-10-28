@@ -41,7 +41,6 @@ def metrics(y_true, y_pred):
     y_pred = np.asarray(y_pred).reshape(-1)[: len(y_true)]
     mae = mean_absolute_error(y_true, y_pred)
     rmse = mean_squared_error(y_true, y_pred, squared=False)
-    mape = float(np.mean(np.abs((y_true - y_pred) / np.clip(np.abs(y_true), 1e-12, None))) * 100.0)
     return mae, rmse, mape
 
 def build_lags(df, target_col, max_lag=5):
