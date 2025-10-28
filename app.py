@@ -173,13 +173,23 @@ with tab2:
                 corr,
                 text_auto=True,
                 color_continuous_scale="RdBu_r",
-                title="Correlation Heatmap"
+                title="Correlation Heatmap",
+                width=1000,
+                height=800
             )
-            st.plotly_chart(fig, use_container_width=True)
+            fig.update_layout(
+                title_font_size=24,
+                xaxis=dict(tickfont=dict(size=14)),
+                yaxis=dict(tickfont=dict(size=14)),
+                margin=dict(l=80, r=80, t=100, b=80)
+            )
+            st.plotly_chart(fig, use_container_width=False)
         else:
             st.warning("Need ≥2 numeric columns.")
     else:
         st.info("Clean data first in Tab 1.")
+
+
 
 
 # ============================================================
@@ -405,8 +415,6 @@ with tab7:
         import traceback
         st.error("💥 Short-Term Forecast crashed — traceback below:")
         st.code(traceback.format_exc())
-
-
 
 # ============================================================
 # TAB 8 — Long-Term Forecast (5-Year Horizon)
